@@ -1,0 +1,43 @@
+import boto3
+from datetime import datetime
+import logging
+import os
+import pytz
+import sys
+from awsglue.context import GlueContext
+from awsglue.job import Job
+from awsglue.transforms import *
+from awsglue.utils import getResolvedOptions
+from base64 import b64decode
+from pyspark.context import SparkContext
+from awsglue.context import GlueContext
+from pyspark.sql.functions import lit
+from awsglue.dynamicframe import DynamicFrame
+
+## @params: [TempDir, JOB_NAME]
+args = getResolvedOptions(sys.argv, ['TempDir','JOB_NAME'])
+
+sc = SparkContext()
+glueContext = GlueContext(sc)
+spark = glueContext.spark_session
+job = Job(glueContext)
+job.init(args['JOB_NAME'], args)
+
+datasource0 = glueContext.create_dynamic_frame.from_catalog(database = "hackathon-ulcmp01d", table_name = "ulcmp01d_spid", transformation_ctx = "datasource0")
+
+applymapping1 = ApplyMapping.apply(frame = datasource0, mappings = [("activitytype", "string", "activitytype", "string"), ("enterprisecustomer_nb", "string", "enterprisecustomer_nb", "string"), ("fullpolicy_nb", "string", "fullpolicy_nb", "string"), ("termmonth_ct", "long", "termmonth_ct", "long"), ("status", "string", "status", "string"), ("policyterm_ct", "long", "policyterm_ct", "long"), ("policyeffective_dt", "string", "policyeffective_dt", "string"), ("policyexpiration_dt", "string", "policyexpiration_dt", "string"), ("product_tp", "long", "product_tp", "long"), ("product_ds", "string", "product_ds", "string"), ("contract_tp", "long", "contract_tp", "long"), ("contract_ds", "string", "contract_ds", "string"), ("fulltermpolicypremium", "double", "fulltermpolicypremium", "double"), ("distributionpartner_cd", "string", "distributionpartner_cd", "string"), ("policyratedstate_tp", "long", "policyratedstate_tp", "long"), ("policyratedstate_ds", "string", "policyratedstate_ds", "string"), ("policyadminsystem_ds", "string", "policyadminsystem_ds", "string"), ("accesspoint_tp", "long", "accesspoint_tp", "long"), ("acquisitionchannel_ds", "string", "acquisitionchannel_ds", "string"), ("accountingyearmonth_ds", "string", "accountingyearmonth_ds", "string")], transformation_ctx = "applymapping1")
+
+resolvechoice2 = ResolveChoice.apply(frame = applymapping1, choice = "make_cols", transformation_ctx = "resolvechoice2")
+
+dropnullfields3 = DropNullFields.apply(frame = resolvechoice2, transformation_ctx = "dropnullfields3")
+
+dropspecificfields= DropFields.apply(frame = dropnullfields3, paths = ["enterprisecustomer_nb","termmonth_ct","policyratedstate_tp","policyadminsystem_ds","accesspoint_tp"], transformation_ctx = "dropfields")
+
+fil_type1 = Filter.apply(frame = dropspecificfields, f = lambda x: x["activitytype"] == 'BIND')
+fil_type2 = Filter.apply(frame = fil_type1, f = lambda x: x["status"] == 'ACTIVE')
+fil_type3 = Filter.apply(frame = fil_type2, f = lambda x: x["policyterm_ct"] < 2)
+fil_type4 = Filter.apply(frame = fil_type3, f = lambda x: x["contract_ds"] not in ["Tenants", "Condo"])
+
+resultset = glueContext.write_dynamic_frame.from_jdbc_conf(frame = fil_type4, catalog_connection = "devepd01", connection_options = {"database" : "ulcmp01d", "dbtable" : "partnercomp_vol"}, transformation_ctx = "datasink4")
+
+job.commit()
